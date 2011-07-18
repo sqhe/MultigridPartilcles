@@ -19,11 +19,18 @@
 #include "ParticleSystem.cuh"
 #include "particles_kernel.cuh"
 
+#include "orthogonal_basis.h"
+
+
+//********************************************************
+#include <fstream>
+//********************************************************
+
 #ifndef CUDART_PI_F
 #define CUDART_PI_F			3.141592654f
 #endif
 
-ParticleSystem::ParticleSystem(uint numParticles, bool bUseVBO /* = true */, bool bUseGL /* = true */) :
+ParticleSystem::ParticleSystem(uint numParticles,vec3f diskPosc, float radius, vec3f diskDirc, float vel_originalc, bool bUseVBO /* = true */, bool bUseGL /* = true */) :
 	m_bInitialized(false),
 	m_bUseVBO(bUseVBO),
 	m_numParticles(numParticles),
@@ -37,12 +44,25 @@ ParticleSystem::ParticleSystem(uint numParticles, bool bUseVBO /* = true */, boo
 	m_params.noiseSpeed = make_float3(0.0f, 0.0f, 0.0f);
 
 	_initialize(numParticles, bUseGL);
+
+	diskPos = diskPosc;
+	diskDir = diskDirc;
+	diskRadius = radius;
+	vel_original = vel_originalc;
 }
 
 ParticleSystem::~ParticleSystem()
 {
 	_free();
 	m_numParticles=0;
+}
+
+void
+ParticleSystem::setDisk(vec3f pos,float radius,vec3f dir)
+{
+	diskPos = pos;
+	diskRadius = radius;
+	diskDir = dir;
 }
 
 void
@@ -198,6 +218,63 @@ ParticleSystem::initGrid(vec3f start, uint3 size,vec3f spacing, float jitter, ve
 }
 
 void
+ParticleSystem::initDiskRandom(vec3f diskPosc, vec3f diskDirc,float diskRadiusc, float vel_originalc,float lifetime/*=100.0f*/)
+{
+	//diskPos = diskPosc;
+	//diskDir = diskDirc;
+	//diskRadius = diskRadiusc;
+	setDisk(diskPosc,diskRadiusc,diskDirc);
+	vel_original = vel_originalc;
+
+	float4 *posPtr = m_pos.getHostPtr();
+	float4 *velPtr = m_vel.getHostPtr();
+
+	float *bas;
+
+	bas =new float[6];
+
+	find_orth_basic(diskDir,bas);
+
+	vec3f pdir0(bas[0],bas[1],bas[2]);
+	vec3f pdir1(bas[2],bas[4],bas[5]);
+
+	for (uint i=0;i<m_numParticles;i++)
+	{
+		//float b0,b1;
+		//b0 = sfrand(); b1 = sfrand();
+		//if(b0*b0+b1*b1 > 1)
+		//{
+		//	b0*=0.707;
+		//	b1*=0.707;
+		//}
+		//vec3f pos = diskPos + diskRadius*b0*pdir0 + diskRadius*b1*pdir1;
+
+		float r,theta;
+		r = frand(); theta = 3.141592653589793238462643383280 * sfrand();
+		vec3f pos = diskPos + r*diskRadius*(pdir0*sin(theta) + pdir1*cos(theta));
+		
+		vec3f vel = vel_original*diskDir;
+		posPtr[i] = make_float4(pos.x,pos.y,pos.z,0.0f);
+		velPtr[i] = make_float4(vel.x,vel.y,vel.z,lifetime);
+	}
+
+	//*****************************************************************************************
+	std::ofstream ofile("pos.txt");
+
+	ofile<<"init"<<std::endl;
+	for (uint i=0;i<m_numParticles;i++)
+	{
+		ofile<<i<<": "<<posPtr[i].x<<" "<<posPtr[i].y<<" "<<posPtr[i].z<<" "<<posPtr[i].w<<"  ,        "<<velPtr[i].x<<" "<<velPtr[i].y<<" "<<velPtr[i].z<<" "<<velPtr[i].w<<" "<<std::endl;
+	}
+
+	ofile<<std::endl;
+
+	ofile.close();
+	//*****************************************************************************************
+
+}
+
+void
 ParticleSystem::initCubeRandom(vec3f origin, vec3f size, vec3f vel, float lifetime/* =100.0f */)
 {
 	float4 *posPtr = m_pos.getHostPtr();
@@ -247,6 +324,10 @@ ParticleSystem::reset(ParticleConfig config)
 	switch(config)
 	{
 	default:
+	case CONFIG_DISK:
+		initDiskRandom(diskPos,diskDir,diskRadius,vel_original,100.0);
+		break;
+
 	case CONFIG_RANDOM:
 		initCubeRandom(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 1.0, 1.0), vec3f(0.0f), 100.0);
 		break;

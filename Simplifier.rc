@@ -117,11 +117,14 @@ IDR_MAINFRAME           BITMAP                  "res\\Toolbar.bmp"
 
 IDR_MAINFRAME TOOLBAR  16, 15
 BEGIN
-    BUTTON      ID_EDIT_CUT
-    BUTTON      ID_EDIT_COPY
-    BUTTON      ID_EDIT_PASTE
+    BUTTON      ID_M_VIEW
+    BUTTON      ID_M_SPHERE
+    BUTTON      ID_M_CHIMNEY
     SEPARATOR
-    BUTTON      ID_APP_ABOUT
+    BUTTON      ID_DIS_BOUND
+    BUTTON      ID_BUTTON32771
+    BUTTON      ID_BUTTON32772
+    BUTTON      ID_BUTTON32774
 END
 
 
@@ -335,6 +338,14 @@ STRINGTABLE
 BEGIN
     AFX_IDS_SCRESTORE       "Restore the window to normal size"
     AFX_IDS_SCTASKLIST      "Activate Task List"
+END
+
+STRINGTABLE 
+BEGIN
+    ID_M_VIEW               "overview"
+    ID_M_SPHERE             "move sphere"
+    ID_M_CHIMNEY            "move chimney"
+    ID_DIS_BOUND            "display boundbox"
 END
 
 #endif    // English (U.S.) resources

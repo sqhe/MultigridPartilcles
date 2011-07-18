@@ -23,6 +23,11 @@
 #define	ROTATE_RATE		4.0f
 #define	ZOOM_RATE		0.05f
 
+extern int mode;
+extern bool displayBound;
+
+enum M_MODE { M_VIEW = 0, M_MOVE_SPHERE, M_MOVE_CHIMNEY };
+
 // CChildView window
 
 class CChildView : public CWnd
@@ -52,8 +57,14 @@ public:
 protected:
 	afx_msg void OnPaint();
 	DECLARE_MESSAGE_MAP()
+
+	afx_msg void OnMoveView();
+	afx_msg void OnMoveSphere();
+	afx_msg void OnMoveChimney();
+	afx_msg void OnShowBound();
 public:
 	CClientDC *m_pDC;
+	void DrawAxes();
 	void Init();
 	void clean();
 	BOOL SetThePixelFormat(void);

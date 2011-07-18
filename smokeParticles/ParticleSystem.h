@@ -13,13 +13,14 @@ using namespace nv;
 class ParticleSystem
 {
 public:
-	ParticleSystem(uint numParticles, bool bUseVBO = true, bool bUseGL = true);
+	ParticleSystem(uint numParticles, vec3f diskPosc, float radius, vec3f diskDirc, float vel_originalc,bool bUseVBO = true, bool bUseGL = true);
 	~ParticleSystem();
 
 	enum ParticleConfig
 	{
 		CONFIG_RANDOM,
 		CONFIG_GRID,
+		CONFIG_DISK,
 		_NUM_CONFIGS
 	};
 
@@ -50,6 +51,8 @@ public:
 	void dumpParticles(uint start, uint count);
 	void dumpBin(float4 **posData, float4 **velData);
 
+	void setDisk(vec3f pos,float radius,vec3f dir);
+
 protected:// method
 	ParticleSystem() {}
 
@@ -57,6 +60,7 @@ protected:// method
 	void _free();
 
 	void initGrid(vec3f start, uint3 size,vec3f spacing, float jitter, vec3f vel, uint numParticles, float lifetime=100.0f);
+	void initDiskRandom(vec3f diskPosc,vec3f diskDirc,float diskRadiusc, float vel_originalc,float lifetime=100.0f);
 	void initCubeRandom(vec3f origin, vec3f size, vec3f vel, float lifetime=100.0f);
 
 protected://data
@@ -81,5 +85,11 @@ protected://data
 
 	uint m_timer;
 	float m_time;
+
+	vec3f diskPos;
+	vec3f diskDir;
+
+	float diskRadius;
+	float vel_original;
 };
 #endif

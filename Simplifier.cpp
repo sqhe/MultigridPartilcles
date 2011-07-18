@@ -78,7 +78,7 @@ BOOL CSimplifierApp::InitInstance()
 
 
 	// The one and only window has been initialized, so show and update it
-	pFrame->ShowWindow(SW_SHOW);
+	pFrame->ShowWindow(SW_MAXIMIZE/*SW_SHOW*/);
 	pFrame->SetWindowText("Particles");
 	pFrame->UpdateWindow();
 	// call DragAcceptFiles only if there's a suffix

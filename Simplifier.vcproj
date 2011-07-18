@@ -319,10 +319,6 @@
 					Name="src"
 					>
 					<File
-						RelativePath=".\smokeParticles\particleDemo.cpp"
-						>
-					</File>
-					<File
 						RelativePath=".\smokeParticles\ParticleSystem.cpp"
 						>
 					</File>
@@ -371,6 +367,18 @@
 						>
 					</File>
 				</Filter>
+				<Filter
+					Name="tools"
+					>
+					<File
+						RelativePath=".\smokeParticles\orthogonal_basis.cpp"
+						>
+					</File>
+					<File
+						RelativePath=".\smokeParticles\orthogonal_basis.h"
+						>
+					</File>
+				</Filter>
 			</Filter>
 		</Filter>
 		<Filter
@@ -404,10 +412,6 @@
 			</File>
 			<File
 				RelativePath=".\targetver.h"
-				>
-			</File>
-			<File
-				RelativePath=".\Vector3.h"
 				>
 			</File>
 		</Filter>
@@ -475,5 +479,9 @@
 		</File>
 	</Files>
 	<Globals>
+		<Global
+			Name="RESOURCE_FILE"
+			Value="Simplifier.rc"
+		/>
 	</Globals>
 </VisualStudioProject>

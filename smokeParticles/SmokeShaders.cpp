@@ -262,10 +262,11 @@ void main()                                                                   \n
 
     vec3 N = normalize(normalEye);                                            \n
     vec3 L = normalize(lightPosEye - vertexPosEye.xyz);                       \n
-    float diffuse = max(0.0, dot(N, L));                                      \n
+    float diffuse = dot(N,L)/*max(0.0, dot(N, L))*/;                                      \n
+	if (diffuse<0)  diffuse=-diffuse;  \n
 
     vec3 shadow = vec3(1.0) - texture2DProj(shadowTex, shadowPos.xyw).xyz;    \n
     if (shadowPos.w < 0.0) shadow = lightColor;	                              \n // avoid back projections
-    gl_FragColor = vec4(gl_Color.xyz * colorMap.xyz * diffuse * shadow, 1.0); \n
+    gl_FragColor = vec4(gl_Color.xyz * colorMap.xyz * diffuse /** 5*shadow*/, 1.0); \n
 }                                                                             \n
 );

@@ -12,7 +12,7 @@
 #endif
 
 int winWidth = 1280, winHeight = 1024;
-int timer_span=10,timer_span_bak=10;
+int timer_span=300,timer_span_bak=10;
 
 // CChildView
 
@@ -43,6 +43,12 @@ BEGIN_MESSAGE_MAP(CChildView, CWnd)
 	ON_WM_SETCURSOR()
 	ON_WM_TIMER()
 	ON_WM_MOUSEMOVE()
+
+	ON_COMMAND(ID_M_VIEW, OnMoveView)
+	ON_COMMAND(ID_M_SPHERE, OnMoveSphere)
+	ON_COMMAND(ID_M_CHIMNEY, OnMoveChimney)
+	ON_COMMAND(ID_DIS_BOUND, OnShowBound)
+
 END_MESSAGE_MAP()
 
 
@@ -64,6 +70,26 @@ BOOL CChildView::PreCreateWindow(CREATESTRUCT& cs)
 	return TRUE;
 }
 
+void CChildView::OnMoveView()
+{
+	mode = M_VIEW;
+}
+
+void CChildView::OnMoveSphere()
+{
+	mode = M_MOVE_SPHERE;
+}
+
+void CChildView::OnMoveChimney()
+{
+	mode = M_MOVE_CHIMNEY;
+}
+
+void CChildView::OnShowBound()
+{
+	displayBound = !displayBound;
+}
+
 void CChildView::OnPaint() 
 {
 	CPaintDC dc(this); // device context for painting
@@ -71,6 +97,7 @@ void CChildView::OnPaint()
 	// TODO: Add your message handler code here
 
 	preDisplay();
+
 	DrawScene();
 
 	SwapBuffers(wglGetCurrentDC());
@@ -107,6 +134,199 @@ void CChildView::Init()
 void CChildView::clean()
 {
 	cleanpaint();
+}
+
+void CChildView::DrawAxes()
+{
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+
+	glScalef(1.4f, 1.4f, 1.4f);
+
+	glLineWidth(4);
+
+	glBegin(GL_LINES);	
+	// x axis
+	glColor3f ( 1.0f, 0.0f, 0.0f);
+	glVertex3f( 0.0f, 0.0f, 0.0f);
+	glVertex3f( 1.0f, 0.0f, 0.0f);
+
+	// y axis
+	glColor3f ( 0.0f, 1.0f, 0.0f);
+	glVertex3f( 0.0f, 0.0f, 0.0f);
+	glVertex3f( 0.0f, 1.0f, 0.0f);
+
+	// z axis
+	glColor3f ( 0.0f, 0.0f, 1.0f);
+	glVertex3f( 0.0f, 0.0f, 0.0f);
+	glVertex3f( 0.0f, 0.0f, 1.0f);
+	glEnd();
+
+	glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+	glBegin(GL_TRIANGLES);	
+
+	// x axis arrow
+	glColor3f ( 1.0f, 0.0f,  0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    0.0f,    0.04f);
+	glVertex3f(0.9f,    0.028f,  0.028f);
+	glVertex3f(0.9f,    0.0f,    0.04f);
+	glVertex3f(0.9f,    0.028f,  0.028f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    0.028f,  0.028f);
+	glVertex3f(0.9f,    0.04f,   0.0f);
+	glVertex3f(0.9f,    0.028f,  0.028f);
+	glVertex3f(0.9f,    0.04f,   0.0f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    0.04f,   0.0f);
+	glVertex3f(0.9f,    0.028f,  -0.028f);
+	glVertex3f(0.9f,    0.04f,   0.0f);
+	glVertex3f(0.9f,    0.028f,  -0.028f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    0.028f,  -0.028f);
+	glVertex3f(0.9f,    0.0f,    -0.04f);
+	glVertex3f(0.9f,    0.028f,  -0.028f);
+	glVertex3f(0.9f,    0.0f,    -0.04f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    0.0f,    -0.04f);
+	glVertex3f(0.9f,    -0.028f, -0.028f);
+	glVertex3f(0.9f,    0.0f,    -0.04f);
+	glVertex3f(0.9f,    -0.028f, -0.028f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    -0.028f, -0.028f);
+	glVertex3f(0.9f,    -0.04f,  0.0f);
+	glVertex3f(0.9f,    -0.028f, -0.028f);
+	glVertex3f(0.9f,    -0.04f,  0.0f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    -0.04f,  0.0f);
+	glVertex3f(0.9f,    -0.028f, 0.028f);
+	glVertex3f(0.9f,    -0.04f,  0.0f);
+	glVertex3f(0.9f,    -0.028f, 0.028f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+	glVertex3f(1.0f,    0.0f,    0.0f);
+	glVertex3f(0.9f,    -0.028f, 0.028f);
+	glVertex3f(0.9f,    0.0f,    0.04f);
+	glVertex3f(0.9f,    -0.028f, 0.028f);
+	glVertex3f(0.9f,    0.0f,    0.04f);
+	glVertex3f(0.9f,    0.0f,    0.0f);
+
+	// y axis arrow
+	glColor3f ( 0.0f, 1.0f, 0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(0.0f,    0.9f,    0.04f);
+	glVertex3f(0.028f,  0.9f,    0.028f);
+	glVertex3f(0.0f,    0.9f,    0.04f);
+	glVertex3f(0.028f,  0.9f,    0.028f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(0.028f,  0.9f,    0.028f);
+	glVertex3f(0.04f,   0.9f,    0.0f);
+	glVertex3f(0.028f,  0.9f,    0.028f);
+	glVertex3f(0.04f,   0.9f,    0.0f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(0.04f,   0.9f,    0.0f);
+	glVertex3f(0.028f,  0.9f,    -0.028f);
+	glVertex3f(0.04f,   0.9f,    0.0f);
+	glVertex3f(0.028f,  0.9f,    -0.028f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(0.028f,  0.9f,    -0.028f);
+	glVertex3f(0.0f,    0.9f,    -0.04f);
+	glVertex3f(0.028f,  0.9f,    -0.028f);
+	glVertex3f(0.0f,    0.9f,    -0.04f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(0.0f,    0.9f,    -0.04f);
+	glVertex3f(-0.028f, 0.9f,    -0.028f);
+	glVertex3f(0.0f,    0.9f,    -0.04f);
+	glVertex3f(-0.028f, 0.9f,    -0.028f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(-0.028f, 0.9f,    -0.028f);
+	glVertex3f(-0.04f,  0.9f,    0.0f);
+	glVertex3f(-0.028f, 0.9f,    -0.028f);
+	glVertex3f(-0.04f,  0.9f,    0.0f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(-0.04f,  0.9f,    0.0f);
+	glVertex3f(-0.028f, 0.9f,    0.028f);
+	glVertex3f(-0.04f,  0.9f,    0.0f);
+	glVertex3f(-0.028f, 0.9f,    0.028f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+	glVertex3f(0.0f,    1.0f,    0.0f);
+	glVertex3f(-0.028f, 0.9f,    0.028f);
+	glVertex3f(0.0f,    0.9f,    0.04f);
+	glVertex3f(-0.028f, 0.9f,    0.028f);
+	glVertex3f(0.0f,    0.9f,    0.04f);
+	glVertex3f(0.0f,    0.9f,    0.0f);
+
+	// z axis arrow
+	glColor3f ( 0.0f, 0.0f, 1.0f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(0.0f,    0.04f,   0.9f);
+	glVertex3f(0.028f,  0.028f,  0.9f);
+	glVertex3f(0.0f,    0.04f,   0.9f);
+	glVertex3f(0.028f,  0.028f,  0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(0.028f,  0.028f,  0.9f);
+	glVertex3f(0.04f,   0.0f,    0.9f);
+	glVertex3f(0.028f,  0.028f,  0.9f);
+	glVertex3f(0.04f,   0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(0.04f,   0.0f,    0.9f);
+	glVertex3f(0.028f,  -0.028f, 0.9f);
+	glVertex3f(0.04f,   0.0f,    0.9f);
+	glVertex3f(0.028f,  -0.028f, 0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(0.028f,  -0.028f, 0.9f);
+	glVertex3f(0.0f,    -0.04f,  0.9f);
+	glVertex3f(0.028f,  -0.028f, 0.9f);
+	glVertex3f(0.0f,    -0.04f,  0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(0.0f,    -0.04f,  0.9f);
+	glVertex3f(-0.028f, -0.028f, 0.9f);
+	glVertex3f(0.0f,    -0.04f,  0.9f);
+	glVertex3f(-0.028f, -0.028f, 0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(-0.028f, -0.028f, 0.9f);
+	glVertex3f(-0.04f,  0.0f,    0.9f);
+	glVertex3f(-0.028f, -0.028f, 0.9f);
+	glVertex3f(-0.04f,  0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(-0.04f,  0.0f,    0.9f);
+	glVertex3f(-0.028f, 0.028f,  0.9f);
+	glVertex3f(-0.04f,  0.0f,    0.9f);
+	glVertex3f(-0.028f, 0.028f,  0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+	glVertex3f(0.0f,    0.0f,    1.0f);
+	glVertex3f(-0.028f, 0.028f,  0.9f);
+	glVertex3f(0.0f,    0.04f,   0.9f);
+	glVertex3f(-0.028f, 0.028f,  0.9f);
+	glVertex3f(0.0f,    0.04f,   0.9f);
+	glVertex3f(0.0f,    0.0f,    0.9f);
+
+
+	// 	glPolygonMode(GL_FRONT,GL_LINE);
+	// 	glPolygonMode(GL_BACK,GL_LINE);
+	glEnd();
+	glPopMatrix();
+	//glEnable(GL_LIGHTING);
+	glColor3f ( 1.0f, 1.0f, 0.0f);
+
+	glLineWidth(1);
 }
 
 BOOL CChildView::SetThePixelFormat(void)
@@ -159,6 +379,9 @@ BOOL CChildView::SetThePixelFormat(void)
 void CChildView::DrawScene(void)
 {
 	display();
+
+	if (displayBound)
+		DrawAxes();
 }
 
 int CChildView::OnCreate(LPCREATESTRUCT lpCreateStruct)

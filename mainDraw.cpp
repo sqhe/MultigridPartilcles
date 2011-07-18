@@ -1,28 +1,63 @@
 #include "StdAfx.h"
 #include "mainDraw.h"
 
-uint numParticles = 1<<16;
+#include "GLSLProgram.h"
+#include "SmokeShaders.h"
+#include "SmokeRenderer.h"
+
+#define M_PI		3.141592653589793238462643383280
+
+uint numParticles = 1<<10;
+
+float vel_orignal = 0.1;
 
 bool keyDown[256];
 
+float boundBox[6];
+int gridResolution[3];
+float dir_size[3];
+
 bool displaySliders = false;
+
 int ox, oy;
 int buttonState = -1;
-int mode = 0;
 
-ParticleSystem *particle_obj;
-float zoom=0;
-float slowdown=2.0f;	
+int mode = 0;
+bool displayBound = true;
+
+ParticleSystem *particle_obj = 0;
+SmokeRenderer *renderer = 0;
+GLSLProgram  *backgroundProg = 0;
+
+float   zoom=0;
+float   slowdown=2.0f;	
 float	xspeed=0;	
 float	yspeed=0;	
 
 GLuint point_sprite_texture;
 GLuint sky_floor_texture;
 
-Vector3 cameraPos(0,-5,-10);
-Vector3 cameraRot(0,0,0);
-Vector3 cameraPosLag(cameraPos);
-Vector3 cameraRotLag(cameraRot);
+vec3f cameraPos(0,-5,-10);
+vec3f cameraRot(0,0,0);
+vec3f cameraPosLag(cameraPos);
+vec3f cameraRotLag(cameraRot);
+
+vec3f chimneyPos(0,0,0);
+vec3f chimneyDir(0,1,0);
+vec3f obspherePos(0,6,0);
+
+GLfloat obsphereRadius=2;
+GLfloat chimneyupRadius=1;
+GLfloat chimneydownRadius=1;
+GLfloat chimneyHeight=2;
+
+vec3f diskPos;
+
+float spspeed = 0.2;
+float chspeed = 0.2;
+
+GLUquadric *chimneyObj;
+GLUquadric *obsphereObj;
 
 const float walkSpeed=0.05;
 const float rotateSpeed=0.002;
@@ -33,6 +68,20 @@ float modelView[16];
 
 float vv=10;
 float s=20;
+
+float timestep = 0.5f;
+float spriteSize = 0.05f;
+float alpha = 0.1;
+float shadowAlpha = 0.02;
+bool displayLightBuffer = false;
+float blurRadius = 2.0;
+int numSlices = 64;
+int numDisplayedSlices = numSlices;
+bool sort = true;
+
+vec3f lightPos(5.0, 5.0, -5.0);
+vec3f lightColor(1.0, 1.0, 0.8);
+vec3f colorAttenuation(0.5, 0.75, 1.0);
 
 AUX_RGBImageRec *LoadBMP(char *Filename)
 {
@@ -100,16 +149,41 @@ int LoadGLTextures()
 	return Status;
 }
 
-
 void initpaint()
 {
+	glewInit();
+
 	if (!LoadGLTextures())
 	{
 		return;
 	}
-	
 
-	particle_obj=new ParticleSystem(numParticles, false, false);
+	diskPos = chimneyPos + chimneyHeight*chimneyDir;
+	
+	particle_obj=new ParticleSystem(numParticles,diskPos,chimneyupRadius,chimneyDir,vel_orignal, true, true);
+	particle_obj->reset(ParticleSystem::CONFIG_DISK);
+
+	renderer = new SmokeRenderer(numParticles);
+	//renderer->setLightTarget(vec3f(0,1,0));
+
+	chimneyObj = gluNewQuadric();
+	obsphereObj = gluNewQuadric();
+
+	backgroundProg = new GLSLProgram(floorVS,floorPS);
+
+	boundBox[0] = -5 ;
+	boundBox[1] = 5 ;
+	boundBox[2] = 0 ;
+	boundBox[3] = 10 ;
+	boundBox[4] = -5 ;
+	boundBox[5] = 5 ;
+
+	gridResolution[0] = 32 ;
+	gridResolution[1] = 32 ;
+	gridResolution[2] = 32 ;
+
+	for (int i=0;i<3;i++)
+		dir_size[i]=(boundBox[2*i+1]-boundBox[2*i])/gridResolution[i];
 }
 
 void cleanpaint()
@@ -120,13 +194,25 @@ void cleanpaint()
 
 		particle_obj=NULL;
 	}
+
+	gluDeleteQuadric(chimneyObj);
+	gluDeleteQuadric(obsphereObj);
+
+	if (backgroundProg)
+		delete backgroundProg;
+
+	if(renderer)
+	{
+		delete renderer;
+		renderer = NULL;
+	}
 }
 
-void ixform(Vector3 &v, Vector3 &r, float *m)
+void ixform(vec3f &v, vec3f &r, float *m)
 {
-	r.setX(v.x()*m[0] + v.y()*m[1] + v.z()*m[2]);
-	r.setY(v.x()*m[4] + v.y()*m[5] + v.z()*m[6]);
-	r.setZ(v.x()*m[8] + v.y()*m[9] + v.z()*m[10]);
+	r.x = v.x*m[0] + v.y*m[1] + v.z*m[2];
+	r.y = v.x*m[4] + v.y*m[5] + v.z*m[6];
+	r.z = v.x*m[8] + v.y*m[9] + v.z*m[10];
 }
 
 void preDisplay()
@@ -137,36 +223,151 @@ void preDisplay()
 	1   5   9   13  y
 	2   6   10  14  z
 	*/
-	
-	if (keyDown['w']) {
-		cameraPos[0] += modelView[2] * walkSpeed;
-		cameraPos[1] += modelView[6] * walkSpeed;
-		cameraPos[2] += modelView[10] * walkSpeed;
-	}
-	if (keyDown['s']) {
-		cameraPos[0] -= modelView[2] * walkSpeed;
-		cameraPos[1] -= modelView[6] * walkSpeed;
-		cameraPos[2] -= modelView[10] * walkSpeed;
-	}
-	if (keyDown['a']) {
-		cameraPos[0] += modelView[0] * walkSpeed;
-		cameraPos[1] += modelView[4] * walkSpeed;
-		cameraPos[2] += modelView[8] * walkSpeed;
-	}
-	if (keyDown['d']) {
-		cameraPos[0] -= modelView[0] * walkSpeed;
-		cameraPos[1] -= modelView[4] * walkSpeed;
-		cameraPos[2] -= modelView[8] * walkSpeed;
-	}
-	if (keyDown['e']) {
-		cameraPos[0] += modelView[1] * walkSpeed;
-		cameraPos[1] += modelView[5] * walkSpeed;
-		cameraPos[2] += modelView[9] * walkSpeed;
-	}
-	if (keyDown['q']) {
-		cameraPos[0] -= modelView[1] * walkSpeed;
-		cameraPos[1] -= modelView[5] * walkSpeed;
-		cameraPos[2] -= modelView[9] * walkSpeed;
+
+	switch(mode)
+	{
+	case M_VIEW:
+		{
+			if (keyDown['w']) {
+				cameraPos[0] += modelView[2] * walkSpeed;
+				cameraPos[1] += modelView[6] * walkSpeed;
+				cameraPos[2] += modelView[10] * walkSpeed;
+			}
+			if (keyDown['s']) {
+				cameraPos[0] -= modelView[2] * walkSpeed;
+				cameraPos[1] -= modelView[6] * walkSpeed;
+				cameraPos[2] -= modelView[10] * walkSpeed;
+			}
+			if (keyDown['a']) {
+				cameraPos[0] += modelView[0] * walkSpeed;
+				cameraPos[1] += modelView[4] * walkSpeed;
+				cameraPos[2] += modelView[8] * walkSpeed;
+			}
+			if (keyDown['d']) {
+				cameraPos[0] -= modelView[0] * walkSpeed;
+				cameraPos[1] -= modelView[4] * walkSpeed;
+				cameraPos[2] -= modelView[8] * walkSpeed;
+			}
+			if (keyDown['e']) {
+				cameraPos[0] += modelView[1] * walkSpeed;
+				cameraPos[1] += modelView[5] * walkSpeed;
+				cameraPos[2] += modelView[9] * walkSpeed;
+			}
+			if (keyDown['q']) {
+				cameraPos[0] -= modelView[1] * walkSpeed;
+				cameraPos[1] -= modelView[5] * walkSpeed;
+				cameraPos[2] -= modelView[9] * walkSpeed;
+			}
+		}
+		break;
+
+	case M_MOVE_SPHERE:
+		{
+			if (keyDown['w']) {
+				obspherePos[0] -= modelView[2] * spspeed;
+				obspherePos[1] -= modelView[6] * spspeed;
+				obspherePos[2] -= modelView[10] * spspeed;
+			}
+			if (keyDown['s']) {
+				obspherePos[0] += modelView[2] * spspeed;
+				obspherePos[1] += modelView[6] * spspeed;
+				obspherePos[2] += modelView[10] * spspeed;
+			}
+			if (keyDown['a']) {
+				obspherePos[0] -= modelView[0] * spspeed;
+				obspherePos[1] -= modelView[4] * spspeed;
+				obspherePos[2] -= modelView[8] * spspeed;
+			}
+			if (keyDown['d']) {
+				obspherePos[0] += modelView[0] * spspeed;
+				obspherePos[1] += modelView[4] * spspeed;
+				obspherePos[2] += modelView[8] * spspeed;
+			}
+			if (keyDown['e']) {
+				obspherePos[0] -= modelView[1] * spspeed;
+				obspherePos[1] -= modelView[5] * spspeed;
+				obspherePos[2] -= modelView[9] * spspeed;
+			}
+			if (keyDown['q']) {
+				obspherePos[0] += modelView[1] * spspeed;
+				obspherePos[1] += modelView[5] * spspeed;
+				obspherePos[2] += modelView[9] * spspeed;
+			}
+		}
+		break;
+
+	case M_MOVE_CHIMNEY:
+		{
+			if (keyDown['w']) {
+				chimneyPos[0] -= modelView[2] * chspeed;
+				chimneyPos[1] -= modelView[6] * chspeed;
+				chimneyPos[2] -= modelView[10] * chspeed;
+			}
+			if (keyDown['s']) {
+				chimneyPos[0] += modelView[2] * chspeed;
+				chimneyPos[1] += modelView[6] * chspeed;
+				chimneyPos[2] += modelView[10] * chspeed;
+			}
+			if (keyDown['a']) {
+				chimneyPos[0] -= modelView[0] * chspeed;
+				chimneyPos[1] -= modelView[4] * chspeed;
+				chimneyPos[2] -= modelView[8] * chspeed;
+			}
+			if (keyDown['d']) {
+				chimneyPos[0] += modelView[0] * chspeed;
+				chimneyPos[1] += modelView[4] * chspeed;
+				chimneyPos[2] += modelView[8] * chspeed;
+			}
+			if (keyDown['e']) {
+				chimneyPos[0] -= modelView[1] * chspeed;
+				chimneyPos[1] -= modelView[5] * chspeed;
+				chimneyPos[2] -= modelView[9] * chspeed;
+			}
+			if (keyDown['q']) {
+				chimneyPos[0] += modelView[1] * chspeed;
+				chimneyPos[1] += modelView[5] * chspeed;
+				chimneyPos[2] += modelView[9] * chspeed;
+			}
+
+			diskPos = chimneyPos + chimneyHeight*chimneyDir;
+			particle_obj->setDisk(diskPos,chimneyupRadius,chimneyDir);
+			particle_obj->reset(ParticleSystem::CONFIG_DISK);
+		}
+		break;
+	default:
+		{
+			if (keyDown['w']) {
+				cameraPos[0] += modelView[2] * walkSpeed;
+				cameraPos[1] += modelView[6] * walkSpeed;
+				cameraPos[2] += modelView[10] * walkSpeed;
+			}
+			if (keyDown['s']) {
+				cameraPos[0] -= modelView[2] * walkSpeed;
+				cameraPos[1] -= modelView[6] * walkSpeed;
+				cameraPos[2] -= modelView[10] * walkSpeed;
+			}
+			if (keyDown['a']) {
+				cameraPos[0] += modelView[0] * walkSpeed;
+				cameraPos[1] += modelView[4] * walkSpeed;
+				cameraPos[2] += modelView[8] * walkSpeed;
+			}
+			if (keyDown['d']) {
+				cameraPos[0] -= modelView[0] * walkSpeed;
+				cameraPos[1] -= modelView[4] * walkSpeed;
+				cameraPos[2] -= modelView[8] * walkSpeed;
+			}
+			if (keyDown['e']) {
+				cameraPos[0] += modelView[1] * walkSpeed;
+				cameraPos[1] += modelView[5] * walkSpeed;
+				cameraPos[2] += modelView[9] * walkSpeed;
+			}
+			if (keyDown['q']) {
+				cameraPos[0] -= modelView[1] * walkSpeed;
+				cameraPos[1] -= modelView[5] * walkSpeed;
+				cameraPos[2] -= modelView[9] * walkSpeed;
+			}
+		}
+		break;
 	}
 
 	cameraPosLag+=(cameraPos-cameraPosLag)*inertia;
@@ -186,328 +387,169 @@ void preDisplay()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void display()
+void drawbackground()
 {
-	glEnable(GL_DEPTH_TEST);
-	glClearDepth(1.0);
-	glDepthFunc(GL_LEQUAL);
+	// draw boundbox
+
+	if (displayBound)
+		drawboundbox();
+
+	//vec4f tempss(1,1,1,1);
+	// use shader
+	backgroundProg->enable();
+	backgroundProg->bindTexture("tex",sky_floor_texture,GL_TEXTURE_2D,0);
+	backgroundProg->bindTexture("shadowTex",sky_floor_texture,GL_TEXTURE_2D,1);
+	backgroundProg->setUniformfv("lightPosEye",vec4f(1,1,1,1),3);
+	backgroundProg->setUniformfv("lightColor",lightColor,3);
 
 	// draw floor
 
-	glBindTexture(GL_TEXTURE_2D,sky_floor_texture);
-	glEnable(GL_TEXTURE_2D);
-
-	glColor3f(0,1,0);
+	//glColor3f(1.0, 1.0, 1.0);
+	glColor3f(0.75,0.75,0.75);
 	glNormal3f(0.0, 1.0, 0.0);
-
 	glBegin(GL_QUADS);
-	glTexCoord2f(0.f, 0.f);glVertex3f(-vv*s, -0, vv*s);                                                      
-	glTexCoord2f(1.f, 0.f);glVertex3f(vv*s, -0, vv*s);                                                         
-	glTexCoord2f(1.f, 1.f);glVertex3f(vv*s, -0, -vv*s);                                                          
-	glTexCoord2f(0.f, 1.f);glVertex3f(-vv*s, -0, -vv*s);     
+	{
+		float s = 100.f;
+		float rep = 20.f;
+		glTexCoord2f(0.f, 0.f); glVertex3f(-s, 0, -s);
+		glTexCoord2f(rep, 0.f); glVertex3f(s, 0, -s);
+		glTexCoord2f(rep, rep); glVertex3f(s, 0, s);
+		glTexCoord2f(0.f, rep); glVertex3f(-s, 0, s);
+	}
 	glEnd();
 
-	glDisable(GL_TEXTURE_2D);
-
-	glColor3f(1,0,1);
-	glBegin(GL_QUADS);
-	glVertex3f(-10,-10,-10);
-	glVertex3f(10,-10,-10);
-	glVertex3f(10,10,-10);
-	glVertex3f(-10,10,-10);
+	// draw obstacle sphere
 
 	glPushMatrix();
 
-	glTranslatef(0,0,-1);
+	glTranslatef(obspherePos[0],obspherePos[1],obspherePos[2]);
 
-	glColor3f(0,1,1);
-
-	/* Back side */
-	glVertex3f(-1, -1, -1-1);
-	glVertex3f(-1, 1, -1-1);
-	glVertex3f(1, 1, -1-1);
-	glVertex3f(1, -1, -1-1);
-
-	/* Front side */
-	glVertex3f(-1, -1, 1-1);
-	glVertex3f(1, -1, 1-1);
-	glVertex3f(1, 1, 1-1);
-	glVertex3f(-1, 1, 1-1);
-
-	/* Top side */
-	glVertex3f(-1, 1, -1-1);
-	glVertex3f(-1, 1, 1-1);
-	glVertex3f(1, 1, 1-1);
-	glVertex3f(1, 1, -1-1);
-
-	/* Bottom side */
-	glVertex3f(-1, -1, -1-1);
-	glVertex3f(1, -1, -1-1);
-	glVertex3f(1, -1, 1-1);
-	glVertex3f(-1, -1, 1-1);
-
-	/* Left side */
-	glVertex3f(-1, -1, -1-1);
-	glVertex3f(-1, -1, 1-1);
-	glVertex3f(-1, 1, 1-1);
-	glVertex3f(-1, 1, -1-1);
-
-	/* Right side */
-	glVertex3f(1, -1, -1-1);
-	glVertex3f(1, 1, -1-1);
-	glVertex3f(1, 1, 1-1);
-	glVertex3f(1, -1, 1-1);
-
-	glEnd();
+	glColor3f(0.8,0.8,0.2);
+	gluSphere(obsphereObj,obsphereRadius,50,50);
 
 	glPopMatrix();
 
+	// draw chimney
 
-	glBegin(GL_LINES);	
-	// x axis
-	glColor3f ( 1.0f, 0.0f, 0.0f);
-	glVertex3f( 0.0f, 0.0f, 0.0f);
-	glVertex3f( 1.0f, 0.0f, 0.0f);
+	glPushMatrix();
 
-	// y axis
-	glColor3f ( 0.0f, 1.0f, 0.0f);
-	glVertex3f( 0.0f, 0.0f, 0.0f);
-	glVertex3f( 0.0f, 1.0f, 0.0f);
+	glTranslatef(chimneyPos[0],chimneyPos[1],chimneyPos[2]);
+	glRotatef(-90,1,0,0);
 
-	// z axis
-	glColor3f ( 0.0f, 0.0f, 1.0f);
-	glVertex3f( 0.0f, 0.0f, 0.0f);
-	glVertex3f( 0.0f, 0.0f, 1.0f);
-	glEnd();
+	glColor3f(0.3,0.3,0.3);
+	gluCylinder(chimneyObj,chimneydownRadius,chimneyupRadius,chimneyHeight,50,50);
 
-	glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
-	glBegin(GL_TRIANGLES);	
+	glPopMatrix();
 
-	// x axis arrow
-	glColor3f ( 1.0f, 0.0f,  0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    0.0f,    0.04f);
-	glVertex3f(0.9f,    0.028f,  0.028f);
-	glVertex3f(0.9f,    0.0f,    0.04f);
-	glVertex3f(0.9f,    0.028f,  0.028f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    0.028f,  0.028f);
-	glVertex3f(0.9f,    0.04f,   0.0f);
-	glVertex3f(0.9f,    0.028f,  0.028f);
-	glVertex3f(0.9f,    0.04f,   0.0f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    0.04f,   0.0f);
-	glVertex3f(0.9f,    0.028f,  -0.028f);
-	glVertex3f(0.9f,    0.04f,   0.0f);
-	glVertex3f(0.9f,    0.028f,  -0.028f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    0.028f,  -0.028f);
-	glVertex3f(0.9f,    0.0f,    -0.04f);
-	glVertex3f(0.9f,    0.028f,  -0.028f);
-	glVertex3f(0.9f,    0.0f,    -0.04f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    0.0f,    -0.04f);
-	glVertex3f(0.9f,    -0.028f, -0.028f);
-	glVertex3f(0.9f,    0.0f,    -0.04f);
-	glVertex3f(0.9f,    -0.028f, -0.028f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    -0.028f, -0.028f);
-	glVertex3f(0.9f,    -0.04f,  0.0f);
-	glVertex3f(0.9f,    -0.028f, -0.028f);
-	glVertex3f(0.9f,    -0.04f,  0.0f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    -0.04f,  0.0f);
-	glVertex3f(0.9f,    -0.028f, 0.028f);
-	glVertex3f(0.9f,    -0.04f,  0.0f);
-	glVertex3f(0.9f,    -0.028f, 0.028f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
-	glVertex3f(1.0f,    0.0f,    0.0f);
-	glVertex3f(0.9f,    -0.028f, 0.028f);
-	glVertex3f(0.9f,    0.0f,    0.04f);
-	glVertex3f(0.9f,    -0.028f, 0.028f);
-	glVertex3f(0.9f,    0.0f,    0.04f);
-	glVertex3f(0.9f,    0.0f,    0.0f);
+	backgroundProg->disable();
+}
 
-	// y axis arrow
-	glColor3f ( 0.0f, 1.0f, 0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(0.0f,    0.9f,    0.04f);
-	glVertex3f(0.028f,  0.9f,    0.028f);
-	glVertex3f(0.0f,    0.9f,    0.04f);
-	glVertex3f(0.028f,  0.9f,    0.028f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(0.028f,  0.9f,    0.028f);
-	glVertex3f(0.04f,   0.9f,    0.0f);
-	glVertex3f(0.028f,  0.9f,    0.028f);
-	glVertex3f(0.04f,   0.9f,    0.0f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(0.04f,   0.9f,    0.0f);
-	glVertex3f(0.028f,  0.9f,    -0.028f);
-	glVertex3f(0.04f,   0.9f,    0.0f);
-	glVertex3f(0.028f,  0.9f,    -0.028f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(0.028f,  0.9f,    -0.028f);
-	glVertex3f(0.0f,    0.9f,    -0.04f);
-	glVertex3f(0.028f,  0.9f,    -0.028f);
-	glVertex3f(0.0f,    0.9f,    -0.04f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(0.0f,    0.9f,    -0.04f);
-	glVertex3f(-0.028f, 0.9f,    -0.028f);
-	glVertex3f(0.0f,    0.9f,    -0.04f);
-	glVertex3f(-0.028f, 0.9f,    -0.028f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(-0.028f, 0.9f,    -0.028f);
-	glVertex3f(-0.04f,  0.9f,    0.0f);
-	glVertex3f(-0.028f, 0.9f,    -0.028f);
-	glVertex3f(-0.04f,  0.9f,    0.0f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(-0.04f,  0.9f,    0.0f);
-	glVertex3f(-0.028f, 0.9f,    0.028f);
-	glVertex3f(-0.04f,  0.9f,    0.0f);
-	glVertex3f(-0.028f, 0.9f,    0.028f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
-	glVertex3f(0.0f,    1.0f,    0.0f);
-	glVertex3f(-0.028f, 0.9f,    0.028f);
-	glVertex3f(0.0f,    0.9f,    0.04f);
-	glVertex3f(-0.028f, 0.9f,    0.028f);
-	glVertex3f(0.0f,    0.9f,    0.04f);
-	glVertex3f(0.0f,    0.9f,    0.0f);
+void drawboundbox()
+{
+	glColor3f(0,0,1);
 
-	// z axis arrow
-	glColor3f ( 0.0f, 0.0f, 1.0f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(0.0f,    0.04f,   0.9f);
-	glVertex3f(0.028f,  0.028f,  0.9f);
-	glVertex3f(0.0f,    0.04f,   0.9f);
-	glVertex3f(0.028f,  0.028f,  0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(0.028f,  0.028f,  0.9f);
-	glVertex3f(0.04f,   0.0f,    0.9f);
-	glVertex3f(0.028f,  0.028f,  0.9f);
-	glVertex3f(0.04f,   0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(0.04f,   0.0f,    0.9f);
-	glVertex3f(0.028f,  -0.028f, 0.9f);
-	glVertex3f(0.04f,   0.0f,    0.9f);
-	glVertex3f(0.028f,  -0.028f, 0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(0.028f,  -0.028f, 0.9f);
-	glVertex3f(0.0f,    -0.04f,  0.9f);
-	glVertex3f(0.028f,  -0.028f, 0.9f);
-	glVertex3f(0.0f,    -0.04f,  0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(0.0f,    -0.04f,  0.9f);
-	glVertex3f(-0.028f, -0.028f, 0.9f);
-	glVertex3f(0.0f,    -0.04f,  0.9f);
-	glVertex3f(-0.028f, -0.028f, 0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(-0.028f, -0.028f, 0.9f);
-	glVertex3f(-0.04f,  0.0f,    0.9f);
-	glVertex3f(-0.028f, -0.028f, 0.9f);
-	glVertex3f(-0.04f,  0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(-0.04f,  0.0f,    0.9f);
-	glVertex3f(-0.028f, 0.028f,  0.9f);
-	glVertex3f(-0.04f,  0.0f,    0.9f);
-	glVertex3f(-0.028f, 0.028f,  0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
-	glVertex3f(0.0f,    0.0f,    1.0f);
-	glVertex3f(-0.028f, 0.028f,  0.9f);
-	glVertex3f(0.0f,    0.04f,   0.9f);
-	glVertex3f(-0.028f, 0.028f,  0.9f);
-	glVertex3f(0.0f,    0.04f,   0.9f);
-	glVertex3f(0.0f,    0.0f,    0.9f);
+	glLineWidth(4);
+
+	glBegin(GL_LINES);
+
+	glVertex3f(boundBox[1],boundBox[2],boundBox[5]);
+	glVertex3f(boundBox[1],boundBox[2],boundBox[4]);
+
+	glVertex3f(boundBox[1],boundBox[2],boundBox[4]);
+	glVertex3f(boundBox[0],boundBox[2],boundBox[4]);
+
+	glVertex3f(boundBox[0],boundBox[2],boundBox[4]);
+	glVertex3f(boundBox[0],boundBox[2],boundBox[5]);
+
+	glVertex3f(boundBox[0],boundBox[2],boundBox[5]);
+	glVertex3f(boundBox[1],boundBox[2],boundBox[5]);
+
+	glVertex3f(boundBox[1],boundBox[3],boundBox[5]);
+	glVertex3f(boundBox[1],boundBox[3],boundBox[4]);
+
+	glVertex3f(boundBox[1],boundBox[3],boundBox[4]);
+	glVertex3f(boundBox[0],boundBox[3],boundBox[4]);
+
+	glVertex3f(boundBox[0],boundBox[3],boundBox[4]);
+	glVertex3f(boundBox[0],boundBox[3],boundBox[5]);
+
+	glVertex3f(boundBox[0],boundBox[3],boundBox[5]);
+	glVertex3f(boundBox[1],boundBox[3],boundBox[5]);
+
+	glVertex3f(boundBox[1],boundBox[2],boundBox[5]);
+	glVertex3f(boundBox[1],boundBox[3],boundBox[5]);
+
+	glVertex3f(boundBox[1],boundBox[2],boundBox[4]);
+	glVertex3f(boundBox[1],boundBox[3],boundBox[4]);
+
+	glVertex3f(boundBox[0],boundBox[2],boundBox[4]);
+	glVertex3f(boundBox[0],boundBox[3],boundBox[4]);
+
+	glVertex3f(boundBox[0],boundBox[2],boundBox[5]);
+	glVertex3f(boundBox[0],boundBox[3],boundBox[5]);
 
 	glEnd();
 
+	glLineWidth(1);
+}
 
+void renderparticles()
+{
+	//particle_obj->step(timestep);
 
-	//glBlendFunc(GL_SRC_ALPHA,GL_ONE/*GL_ONE_MINUS_SRC_ALPHA*/);
-	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_COLOR);
+	renderer->calcVectors();
+	vec3f sortVector = renderer->getSortVector();
 
-	glEnable(GL_BLEND);
+	particle_obj->setSortVector(make_float3(sortVector.x,sortVector.y,sortVector.z));
+	particle_obj->setModelView(modelView);
+	particle_obj->setSorting(sort);
+	particle_obj->depthSort();
 
-	glAlphaFunc(GL_GREATER,0.1);
+	renderer->beginSceneRender(SmokeRenderer::LIGHT_BUFFER);
+	renderscene();
+	renderer->endSceneRender(SmokeRenderer::LIGHT_BUFFER);
 
+	renderer->beginSceneRender(SmokeRenderer::SCENE_BUFFER);
+	renderscene();
+	renderer->endSceneRender(SmokeRenderer::SCENE_BUFFER);
 
-	glEnable(GL_ALPHA_TEST);
+	renderer->setPositionBuffer(particle_obj->getPosBuffer());
+	renderer->setVelocityBuffer(particle_obj->getVelBuffer());
+	renderer->setIndexBuffer(particle_obj->getSortedIndexBuffer());
 
+	renderer->setNumParticles(particle_obj->getNumParticles());
+	renderer->setParticleRadius(spriteSize);
+	renderer->setDisplayLightBuffer(displayLightBuffer);
+	renderer->setAlpha(alpha);
+	renderer->setShadowAlpha(shadowAlpha);
+	renderer->setLightPosition(lightPos);
+	renderer->setColorAttenuation(colorAttenuation);
+	renderer->setLightColor(lightColor);
+	renderer->setNumSlices(numSlices);
+	renderer->setNumDisplayedSlices(numDisplayedSlices);
+	renderer->setBlurRadius(blurRadius);
 
+	renderer->render();
 
-	glEnable(GL_POINT_SPRITE);
-	glBindTexture(GL_TEXTURE_2D,point_sprite_texture);
-	glTexEnvi(GL_POINT_SPRITE,GL_COORD_REPLACE,GL_TRUE);
-	glEnable(GL_TEXTURE_2D);
+	particle_obj->step(timestep);
+}
 
-	glEnable(GL_CULL_FACE);
+void renderscene()
+{
+	glClearColor(0,0,0,1);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glPointSize(10.0);
-/*
-	for (int i=0;i<MAX_PARTICLES;i++)
-	{
-		if (particle_obj->particle[i].active)
-		{
-			float x=particle_obj->particle[i].x;
-			float y=particle_obj->particle[i].y;
-			float z=particle_obj->particle[i].z+zoom;
+	glEnable(GL_DEPTH_TEST);
+	glDepthMask(GL_TRUE);
 
-			glColor4f(particle_obj->particle[i].r,particle_obj->particle[i].g,particle_obj->particle[i].b,0.2*particle_obj->particle[i].life);
+	drawbackground();
+}
 
-			//glPointSize(4.0);
-			glBegin(GL_POINTS);
-			glVertex3f(x,y,z);
-			glEnd();
+void display()
+{
+	renderscene();
 
-			particle_obj->particle[i].x+=1*particle_obj->particle[i].xi/(slowdown*1000);
-			particle_obj->particle[i].y+=1*particle_obj->particle[i].yi/(slowdown*1000);
-			particle_obj->particle[i].z+=particle_obj->particle[i].zi/(slowdown*1000);
-
-			particle_obj->particle[i].life-=particle_obj->particle[i].fade;
-
-			if (particle_obj->particle[i].life<0)
-			{
-				particle_obj->particle[i].life=1;
-				particle_obj->particle[i].fade=float(rand()%100)/1000+0.003;
-
-				particle_obj->particle[i].x=0;
-				particle_obj->particle[i].y=0;
-				particle_obj->particle[i].z=0;
-
-				particle_obj->particle[i].xi=xspeed+float((rand()%60)-32);
-				particle_obj->particle[i].yi=yspeed+float((rand()%60)-30);
-				particle_obj->particle[i].zi=float((rand()%60)-30);
-
-				particle_obj->particle[i].r=colors[1][0];
-				particle_obj->particle[i].g=colors[1][1];
-				particle_obj->particle[i].b=colors[1][2];
-			}
-
-		}
-	}
-*/
-	glDisable(GL_TEXTURE_2D);
-	glDisable(GL_POINT_SPRITE);
-	glDisable(GL_BLEND);
-
-	glFinish();
+	renderparticles();
 }
 void reshape(int w,int h)
 {
@@ -518,6 +560,9 @@ void reshape(int w,int h)
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	glViewport(0, 0, w, h);
+
+	renderer->setFOV(90.0);
+	renderer->setWindowSize(w,h);
 }
 
 void motion(int x, int y)
@@ -535,9 +580,9 @@ void motion(int x, int y)
 
 	if (buttonState==GLUT_RIGHT_BUTTON)
 	{
-		Vector3 v=Vector3(dx*translateSpeed,dy*translateSpeed,0);
+		vec3f v=vec3f(dx*translateSpeed,dy*translateSpeed,0);
 
-		Vector3 r=Vector3(0,0,0);
+		vec3f r=vec3f(0,0,0);
 
 		ixform(v,r,modelView);
 
@@ -546,9 +591,9 @@ void motion(int x, int y)
 
 	if (buttonState==GLUT_MIDDLE_BUTTON)
 	{
-		Vector3 v=Vector3(0,0,dy*translateSpeed);
+		vec3f v=vec3f(0,0,dy*translateSpeed);
 
-		Vector3 r=Vector3(0,0,0);
+		vec3f r=vec3f(0,0,0);
 
 		ixform(v,r,modelView);
 
