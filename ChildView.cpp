@@ -12,7 +12,7 @@
 #endif
 
 int winWidth = 1280, winHeight = 1024;
-int timer_span=300,timer_span_bak=10;
+int timer_span=30,timer_span_bak=10;
 
 // CChildView
 

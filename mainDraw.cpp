@@ -7,7 +7,7 @@
 
 #define M_PI		3.141592653589793238462643383280
 
-uint numParticles = 1<<10;
+uint numParticles = 1<<12;
 
 float vel_orignal = 0.1;
 

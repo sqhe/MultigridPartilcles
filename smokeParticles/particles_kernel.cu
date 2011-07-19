@@ -99,6 +99,25 @@ integrateD(float4* newPos, float4* newVel,
     pos += vel * deltaTime;
 
     //vel *= params.globalDamping;
+    
+    //if ((index%10)==1)
+    //vel *=2;
+    //else if((index%10)==2)
+    //vel *=3;
+    //else if((index%10)==3)
+    //vel *=4;
+    //else if((index%10)==4)
+    //vel *=5;
+    //else if((index%10)==5)
+    //vel *=6;
+    //else if((index%10)==6)
+    //vel *=7;
+    //else if((index%10)==7)
+    //vel *=8;
+    //else if((index%10)==8)
+    //vel *=9;
+    //else if((index%10)==9)
+    //vel *=10;    
 
     // store new position and velocity
     newPos[index] = make_float4(pos, age);
